@@ -1,0 +1,28 @@
+# Gradle files
+.gradle/
+build/
+
+# Local configuration
+local.properties
+
+# IDE files
+.idea/
+*.iml
+.cxx/
+
+# Keystore files
+*.jks
+*.keystore
+
+# APK and AAB files
+*.apk
+*.aab
+
+# Log files
+*.log
+
+# Captures
+captures/
+
+# Generated files
+.DS_Store

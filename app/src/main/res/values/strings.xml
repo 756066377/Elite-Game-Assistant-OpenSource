@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">U启动器</string>
+    <string name="dashboard">仪表盘</string>
+    <string name="game_enhance">游戏增强</string>
+    <string name="tools">工具箱</string>
+    <string name="settings">设置</string>
+</resources>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 空灵纯白设计风格颜色定义 -->
+    <color name="white">#FFFFFFFF</color>
+    <color name="white_light">#F5F7FA</color>
+    <color name="white_lighter">#E6F7FF</color>
+    <color name="black">#FF000000</color>
+    <color name="gray_100">#F3F4F6</color>
+    <color name="gray_200">#E5E7EB</color>
+    <color name="gray_300">#D1D5DB</color>
+    <color name="gray_400">#9CA3AF</color>
+    <color name="gray_500">#6B7280</color>
+    <color name="blue_primary">#007AFF</color>
+    <color name="blue_light">#5AC8FA</color>
+    <color name="green_success">#34C759</color>
+    <color name="red_error">#FF3B30</color>
+    <color name="yellow_warning">#FFCC00</color>
+    
+    <!-- Material 颜色属性兼容 -->
+    <color name="colorPrimary">@color/blue_primary</color>
+    <color name="colorPrimaryVariant">@color/blue_light</color>
+    <color name="colorOnPrimary">@color/white</color>
+    <color name="colorSecondary">@color/blue_light</color>
+    <color name="colorSecondaryVariant">@color/blue_primary</color>
+    <color name="colorOnSecondary">@color/white</color>
+    <color name="colorBackground">@color/white_light</color>
+    <color name="colorOnBackground">@color/black</color>
+    <color name="colorSurface">@color/white</color>
+    <color name="colorOnSurface">@color/black</color>
+    <color name="colorError">@color/red_error</color>
+    <color name="colorOnError">@color/white</color>
+</resources>
