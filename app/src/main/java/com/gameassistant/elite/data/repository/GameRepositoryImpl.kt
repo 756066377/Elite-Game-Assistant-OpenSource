@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import com.gameassistant.elite.R
 import com.gameassistant.elite.data.repository.SystemMonitorRepository
-import com.gameassistant.elite.domain.model.AuthStatus
+
 import com.gameassistant.elite.domain.model.FeatureCategory
 import com.gameassistant.elite.domain.model.GameFeature
 import com.gameassistant.elite.domain.model.GameInfo
@@ -14,7 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.io.File
+
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -128,46 +128,18 @@ class GameRepositoryImpl @Inject constructor(
         }
     }
     
-    override suspend fun getAuthStatus(): AuthStatus {
+    override suspend fun isCardKeyFilePresent(gameType: String): Boolean {
         return try {
-            // 优先使用 libsu 读取卡密
-            val cardKey = systemMonitorRepository.readCardKey()
-            if (!cardKey.isNullOrEmpty()) {
-                // 这里简化处理，实际验证由SO文件完成
-                AuthStatus(
-                    isAuthorized = true,
-                    cardKey = cardKey,
-                    expiryTime = System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000, // 30天
-                    remainingDays = 30
-                )
-            } else {
-                // 备选方案：从应用私有目录读取
-                val fallbackFile = File(context.filesDir, "uCard.txt")
-                if (fallbackFile.exists()) {
-                    val fallbackKey = fallbackFile.readText().trim()
-                    if (fallbackKey.isNotEmpty()) {
-                        AuthStatus(
-                            isAuthorized = true,
-                            cardKey = fallbackKey,
-                            expiryTime = System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000,
-                            remainingDays = 30
-                        )
-                    } else {
-                        AuthStatus()
-                    }
-                } else {
-                    AuthStatus()
-                }
-            }
+            systemMonitorRepository.doesCardKeyFileExist(gameType)
         } catch (e: Exception) {
-            AuthStatus()
+            false
         }
     }
     
-    override suspend fun saveCardKey(cardKey: String): Boolean {
+    override suspend fun saveCardKey(cardKey: String, gameType: String): Boolean {
         return try {
             // 只使用 libsu 进行 Root 权限写入
-            systemMonitorRepository.writeCardKey(cardKey)
+            systemMonitorRepository.writeCardKey(cardKey, gameType)
         } catch (e: Exception) {
             false
         }
@@ -177,9 +149,15 @@ class GameRepositoryImpl @Inject constructor(
         return try {
             _gameLaunchStatus.value = GameLaunchStatus.LOADING
             
-            // 检查授权状态
-            val authStatus = getAuthStatus()
-            if (!authStatus.isAuthorized) {
+            // 检查授权状态 - 根据gameId确定游戏类型
+            val gameType = when (gameId) {
+                "delta_force" -> "delta"
+                "pubg_mobile" -> "pubg"
+                "valorant_mobile" -> "valorant"
+                else -> "default"
+            }
+            val present = isCardKeyFilePresent(gameType)
+            if (!present) {
                 _gameLaunchStatus.value = GameLaunchStatus.UNAUTHORIZED
                 return false
             }

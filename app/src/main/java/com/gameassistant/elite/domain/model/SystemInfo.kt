@@ -7,8 +7,7 @@ data class SystemInfo(
     val kernelVersion: String = "",
     val buildFingerprint: String = "",
     val androidVersion: String = "",
-    val selinuxStatus: SELinuxStatus = SELinuxStatus.UNKNOWN,
-    val isRooted: Boolean = false
+    val selinuxStatus: SELinuxStatus = SELinuxStatus.UNKNOWN
 )
 
 /**

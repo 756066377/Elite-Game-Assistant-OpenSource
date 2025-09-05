@@ -105,20 +105,24 @@ class SystemInfoDataSource @Inject constructor(
      * 获取SELinux状态
      */
     private fun getSELinuxStatus(): SELinuxStatus {
-        return try {
-            val file = File("/sys/fs/selinux/enforce")
-            if (file.exists()) {
-                val status = file.readText().trim()
-                when (status) {
-                    "1" -> SELinuxStatus.ENFORCING
-                    "0" -> SELinuxStatus.PERMISSIVE
-                    else -> SELinuxStatus.UNKNOWN
-                }
-            } else {
-                SELinuxStatus.DISABLED
+        try {
+            val process = Runtime.getRuntime().exec("getenforce")
+            val reader = BufferedReader(process.inputStream.reader())
+            val status = reader.readLine()?.trim()
+            reader.close()
+            process.waitFor()
+
+            return when (status?.lowercase()) {
+                "enforcing" -> SELinuxStatus.ENFORCING
+                "permissive" -> SELinuxStatus.PERMISSIVE
+                "disabled" -> SELinuxStatus.DISABLED
+                else -> SELinuxStatus.UNKNOWN
             }
-        } catch (e: Exception) {
-            SELinuxStatus.UNKNOWN
+        } catch (e: IOException) {
+            return SELinuxStatus.UNKNOWN
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt() // 恢复中断状态
+            return SELinuxStatus.UNKNOWN
         }
     }
     

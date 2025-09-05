@@ -1,6 +1,6 @@
 package com.gameassistant.elite.data.repository
 
-import com.gameassistant.elite.domain.model.AuthStatus
+
 import com.gameassistant.elite.domain.model.GameInfo
 import com.gameassistant.elite.domain.model.GameLaunchStatus
 import kotlinx.coroutines.flow.Flow
@@ -21,14 +21,17 @@ interface GameRepository {
     suspend fun checkGameInstallation(packageName: String): Boolean
     
     /**
-     * 获取授权状态
+     * 检查卡密文件是否存在
+     * @param gameType 游戏类型
      */
-    suspend fun getAuthStatus(): AuthStatus
+    suspend fun isCardKeyFilePresent(gameType: String = "default"): Boolean
     
     /**
      * 保存卡密
+     * @param cardKey 卡密内容
+     * @param gameType 游戏类型
      */
-    suspend fun saveCardKey(cardKey: String): Boolean
+    suspend fun saveCardKey(cardKey: String, gameType: String = "default"): Boolean
     
     /**
      * 启动游戏辅助

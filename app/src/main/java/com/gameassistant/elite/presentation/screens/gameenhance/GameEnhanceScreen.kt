@@ -2,6 +2,9 @@ package com.gameassistant.elite.presentation.screens.gameenhance
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,16 +15,30 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Gamepad
 import androidx.compose.material3.*
 import android.widget.Toast
+import androidx.compose.animation.core.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.shadow
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,6 +48,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.gameassistant.elite.domain.model.GameInfo
 import com.gameassistant.elite.presentation.components.LoadingAnimation
 import com.gameassistant.elite.presentation.components.LoadingAnimationType
+import com.gameassistant.elite.presentation.components.common.AnimatedFlowBackground
 import com.gameassistant.elite.presentation.components.common.ScreenTitle
 import com.gameassistant.elite.presentation.theme.*
 
@@ -47,8 +65,10 @@ fun GameEnhanceScreen(
     val error by viewModel.error.collectAsState()
     val isCardKeyDialogShown by viewModel.isCardKeyDialogShown.collectAsState()
     val cardKeyInput by viewModel.cardKeyInput.collectAsState()
+    val existingCardKeyHint by viewModel.existingCardKeyHint.collectAsState()
     val toastMessage by viewModel.toastMessage.collectAsState()
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     // 显示 Toast 消息
     LaunchedEffect(toastMessage) {
@@ -62,6 +82,7 @@ fun GameEnhanceScreen(
     if (isCardKeyDialogShown) {
         CardKeyInputDialog(
             cardKey = cardKeyInput,
+            existingCardKeyHint = existingCardKeyHint,
             onCardKeyChange = viewModel::updateCardKeyInput,
             onDismiss = viewModel::hideCardKeyDialog,
             onConfirm = viewModel::activateCardKey,
@@ -69,23 +90,11 @@ fun GameEnhanceScreen(
         )
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        PureWhite,
-                        MistGray.copy(alpha = 0.3f),
-                        LightCyan.copy(alpha = 0.1f)
-                    )
-                )
-            )
-    ) {
+    AnimatedFlowBackground {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
                 ScreenTitle(
@@ -106,7 +115,11 @@ fun GameEnhanceScreen(
                     GameEnhanceCard(
                         game = game,
                         onLaunchClick = { viewModel.launchGameAssist(game.id) },
-                        onWriteCardKeyClick = viewModel::showCardKeyDialog
+                        onWriteCardKeyClick = { 
+                            coroutineScope.launch {
+                                viewModel.selectGameAndShowDialog(game)
+                            }
+                        }
                     )
                 }
             }
@@ -118,7 +131,6 @@ fun GameEnhanceScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
-                    .align(Alignment.BottomCenter)
             ) {
                 Text(
                     text = errorMessage,
@@ -134,7 +146,7 @@ fun GameEnhanceScreen(
 }
 
 /**
- * 新的游戏增强卡片，根据图片设计
+ * 新的游戏增强卡片 - 优化视觉设计版本
  */
 @Composable
 private fun GameEnhanceCard(
@@ -142,20 +154,66 @@ private fun GameEnhanceCard(
     onLaunchClick: () -> Unit,
     onWriteCardKeyClick: () -> Unit
 ) {
+    // 动画状态
+    var isPressed by remember { mutableStateOf(false) }
+    val animatedScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "card_scale"
+    )
+    
+    val animatedElevation by animateDpAsState(
+        targetValue = if (isPressed) 2.dp else 6.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "card_elevation"
+    )
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .scale(animatedScale)
             .shadow(
-                elevation = 4.dp,
+                elevation = animatedElevation,
                 shape = RoundedCornerShape(20.dp),
-                ambientColor = ShadowLight,
-                spotColor = ShadowLight
-            ),
+                ambientColor = ShadowLight.copy(alpha = 0.3f),
+                spotColor = ShadowLight.copy(alpha = 0.5f)
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFFE3F2FD).copy(alpha = 0.6f),
+                        Color(0xFFF3E5F5).copy(alpha = 0.4f),
+                        Color(0xFFE8F5E8).copy(alpha = 0.6f)
+                    ),
+                    start = Offset(0f, 0f),
+                    end = Offset(1000f, 1000f)
+                ),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .drawBehind {
+                // 装饰性角落元素
+                drawCornerDecorations()
+            }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                isPressed = !isPressed
+            },
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFDFDFD)),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFFDFDFD).copy(alpha = 0.95f)
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(modifier = Modifier.padding(24.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
             // 游戏标题和状态
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(
@@ -218,43 +276,236 @@ private fun GameEnhanceCard(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 操作按钮
+            // 操作按钮 - 增强版本
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // 启动辅助按钮
+                var isLaunchPressed by remember { mutableStateOf(false) }
+                val launchButtonScale by animateFloatAsState(
+                    targetValue = if (isLaunchPressed) 0.95f else 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessHigh
+                    ),
+                    label = "launch_button_scale"
+                )
+                
                 Button(
-                    onClick = onLaunchClick,
-                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        isLaunchPressed = true
+                        onLaunchClick()
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .scale(launchButtonScale)
+                        .shadow(
+                            elevation = if (isLaunchPressed) 2.dp else 4.dp,
+                            shape = RoundedCornerShape(12.dp),
+                            ambientColor = AccentBlue.copy(alpha = 0.3f),
+                            spotColor = AccentBlue.copy(alpha = 0.5f)
+                        ),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AccentBlue,
                         contentColor = PureWhite
                     )
                 ) {
-                    Icon(Icons.Default.FlashOn, contentDescription = null)
+                    Icon(
+                        Icons.Default.FlashOn, 
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("启动辅助")
+                    Text(
+                        "启动辅助",
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
+                
+                // 写入卡密按钮
+                var isCardKeyPressed by remember { mutableStateOf(false) }
+                val cardKeyButtonScale by animateFloatAsState(
+                    targetValue = if (isCardKeyPressed) 0.95f else 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessHigh
+                    ),
+                    label = "cardkey_button_scale"
+                )
+                
                 OutlinedButton(
-                    onClick = onWriteCardKeyClick,
-                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        isCardKeyPressed = true
+                        onWriteCardKeyClick()
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .scale(cardKeyButtonScale)
+                        .shadow(
+                            elevation = if (isCardKeyPressed) 1.dp else 3.dp,
+                            shape = RoundedCornerShape(12.dp),
+                            ambientColor = MistGray.copy(alpha = 0.2f),
+                            spotColor = MistGray.copy(alpha = 0.4f)
+                        ),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                     ),
                     border = ButtonDefaults.outlinedButtonBorder.copy(
                         brush = Brush.horizontalGradient(
-                            colors = listOf(MistGray, MistGray.copy(alpha = 0.5f))
+                            colors = listOf(
+                                MistGray.copy(alpha = 0.8f), 
+                                MistGray.copy(alpha = 0.4f),
+                                AccentBlue.copy(alpha = 0.3f)
+                            )
                         )
                     )
                 ) {
-                    Icon(Icons.Default.Key, contentDescription = null)
+                    Icon(
+                        Icons.Default.Key, 
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("写入卡密")
+                    Text(
+                        "写入卡密",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                
+                // 重置按钮状态
+                LaunchedEffect(isLaunchPressed) {
+                    if (isLaunchPressed) {
+                        delay(150)
+                        isLaunchPressed = false
+                    }
+                }
+                
+                LaunchedEffect(isCardKeyPressed) {
+                    if (isCardKeyPressed) {
+                        delay(150)
+                        isCardKeyPressed = false
+                    }
                 }
             }
         }
+    }
+}
+
+/**
+ * 绘制卡片角落装饰元素
+ */
+private fun DrawScope.drawCornerDecorations() {
+    val cornerSize = 24.dp.toPx()
+    val strokeWidth = 2.dp.toPx()
+    val decorationColors = listOf(
+        Color(0xFF2196F3).copy(alpha = 0.6f),
+        Color(0xFF9C27B0).copy(alpha = 0.4f),
+        Color(0xFF4CAF50).copy(alpha = 0.5f)
+    )
+
+    // 左上角装饰
+    val topLeftPath = Path().apply {
+        moveTo(0f, cornerSize)
+        lineTo(0f, cornerSize * 0.3f)
+        quadraticBezierTo(0f, 0f, cornerSize * 0.3f, 0f)
+        lineTo(cornerSize, 0f)
+    }
+    drawPath(
+        path = topLeftPath,
+        brush = Brush.linearGradient(
+            colors = decorationColors,
+            start = Offset(0f, 0f),
+            end = Offset(cornerSize, cornerSize)
+        ),
+        style = Stroke(
+            width = strokeWidth,
+            cap = StrokeCap.Round,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 4f), 0f)
+        )
+    )
+
+    // 右上角装饰
+    val topRightPath = Path().apply {
+        moveTo(size.width - cornerSize, 0f)
+        lineTo(size.width - (cornerSize * 0.3f), 0f)
+        quadraticBezierTo(size.width, 0f, size.width, cornerSize * 0.3f)
+        lineTo(size.width, cornerSize)
+    }
+    drawPath(
+        path = topRightPath,
+        brush = Brush.linearGradient(
+            colors = decorationColors.reversed(),
+            start = Offset(size.width - cornerSize, 0f),
+            end = Offset(size.width, cornerSize)
+        ),
+        style = Stroke(
+            width = strokeWidth,
+            cap = StrokeCap.Round,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+        )
+    )
+
+    // 左下角装饰
+    val bottomLeftPath = Path().apply {
+        moveTo(0f, size.height - cornerSize)
+        lineTo(0f, size.height - (cornerSize * 0.3f))
+        quadraticBezierTo(0f, size.height, cornerSize * 0.3f, size.height)
+        lineTo(cornerSize, size.height)
+    }
+    drawPath(
+        path = bottomLeftPath,
+        brush = Brush.linearGradient(
+            colors = decorationColors.takeLast(2),
+            start = Offset(0f, size.height - cornerSize),
+            end = Offset(cornerSize, size.height)
+        ),
+        style = Stroke(
+            width = strokeWidth,
+            cap = StrokeCap.Round,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 2f), 0f)
+        )
+    )
+
+    // 右下角装饰
+    val bottomRightPath = Path().apply {
+        moveTo(size.width - cornerSize, size.height)
+        lineTo(size.width - (cornerSize * 0.3f), size.height)
+        quadraticBezierTo(size.width, size.height, size.width, size.height - (cornerSize * 0.3f))
+        lineTo(size.width, size.height - cornerSize)
+    }
+    drawPath(
+        path = bottomRightPath,
+        brush = Brush.linearGradient(
+            colors = listOf(decorationColors[0], decorationColors[2]),
+            start = Offset(size.width - cornerSize, size.height),
+            end = Offset(size.width, size.height - cornerSize)
+        ),
+        style = Stroke(
+            width = strokeWidth,
+            cap = StrokeCap.Round,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 8f), 0f)
+        )
+    )
+
+    // 中心装饰点
+    val centerX = size.width / 2
+    val dotRadius = 3.dp.toPx()
+
+    // 绘制几个装饰性的小点
+    listOf(
+        Offset(centerX - 60.dp.toPx(), 20.dp.toPx()),
+        Offset(centerX + 60.dp.toPx(), 20.dp.toPx()),
+        Offset(centerX - 60.dp.toPx(), size.height - 20.dp.toPx()),
+        Offset(centerX + 60.dp.toPx(), size.height - 20.dp.toPx())
+    ).forEachIndexed { index, offset ->
+        drawCircle(
+            color = decorationColors[index % decorationColors.size],
+            radius = dotRadius,
+            center = offset
+        )
     }
 }
 
@@ -288,6 +539,7 @@ private fun FeatureItem(icon: ImageVector, name: String, description: String) {
 @Composable
 fun CardKeyInputDialog(
     cardKey: String,
+    existingCardKeyHint: String?,
     onCardKeyChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
@@ -324,6 +576,29 @@ fun CardKeyInputDialog(
                     ),
                     singleLine = true
                 )
+                
+                // 显示现有卡密提示信息
+                existingCardKeyHint?.let { hint ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = AccentBlue
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = hint,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AccentBlue
+                        )
+                    }
+                }
+                
                 Spacer(modifier = Modifier.height(20.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),

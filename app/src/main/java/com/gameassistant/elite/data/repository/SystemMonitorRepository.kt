@@ -37,18 +37,18 @@ interface SystemMonitorRepository {
      */
     fun getBatteryInfoFlow(): Flow<BatteryInfo>
     
-    /**
-     * 检查 Root 权限状态
-     */
-    suspend fun checkRootStatus(): Boolean
+
     
     /**
      * 写入卡密到系统文件
+     * @param cardKey 卡密内容
+     * @param gameType 游戏类型
      */
-    suspend fun writeCardKey(cardKey: String): Boolean
+    suspend fun writeCardKey(cardKey: String, gameType: String = "default"): Boolean
     
     /**
-     * 读取卡密文件
+     * 检查卡密文件是否存在
+     * @param gameType 游戏类型
      */
-    suspend fun readCardKey(): String?
+    suspend fun doesCardKeyFileExist(gameType: String = "default"): Boolean
 }

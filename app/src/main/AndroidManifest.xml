@@ -13,6 +13,17 @@
     <!-- Root权限相关 -->
     <uses-permission android:name="android.permission.ACCESS_SUPERUSER" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    
+    <!-- 高刷新率显示权限 -->
+    <uses-permission android:name="android.permission.CONTROL_DISPLAY_BRIGHTNESS" />
+    
+    <!-- 声明支持高刷新率屏幕 -->
+    <uses-feature 
+        android:name="android.hardware.screen.landscape" 
+        android:required="false" />
+    <uses-feature 
+        android:name="android.software.activities_on_secondary_displays" 
+        android:required="false" />
 
     <application
         android:name=".GameAssistantApplication"
@@ -29,11 +40,25 @@
         <activity
             android:name=".presentation.MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.GameAssistant">
+            android:theme="@style/Theme.GameAssistant"
+            android:hardwareAccelerated="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            
+            <!-- 支持高刷新率显示 -->
+            <meta-data 
+                android:name="android.app.default_searchable" 
+                android:value=".presentation.MainActivity" />
+            
+            <!-- GPU渲染优化配置 -->
+            <meta-data 
+                android:name="android.graphics.opengl.version" 
+                android:value="0x00030000" />
         </activity>
     </application>
 

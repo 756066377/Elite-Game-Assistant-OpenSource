@@ -94,14 +94,13 @@ fun GameCard(
                         } else {
                             listOf(
                                 PureWhite,
-                                MistGray.copy(alpha = 0.3f),
-                                LightCyan.copy(alpha = 0.2f)
+                                MistGray.copy(alpha = 0.2f)
                             )
                         }
                     ),
                     shape = RoundedCornerShape(16.dp)
                 )
-                .padding(20.dp)
+                .padding(16.dp)  // 统一内边距为16dp
         ) {
             Column {
                 // 游戏标题和图标行
@@ -151,16 +150,15 @@ fun GameCard(
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 
                 // 游戏描述
                 Text(
                     text = game.description,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(bottom = 12.dp)
                 )
-                
-                Spacer(modifier = Modifier.height(16.dp))
                 
                 // 功能特性列表
                 if (game.features.isNotEmpty()) {
@@ -184,12 +182,14 @@ fun GameCard(
                         }
                     }
                     
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
                 
                 // 启动按钮
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),  // 添加上边距分隔
                     horizontalArrangement = Arrangement.End
                 ) {
                     when (launchStatus) {

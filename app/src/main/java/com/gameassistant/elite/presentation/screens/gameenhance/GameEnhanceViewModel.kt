@@ -1,5 +1,6 @@
 package com.gameassistant.elite.presentation.screens.gameenhance
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gameassistant.elite.data.model.GameType
@@ -45,6 +46,9 @@ class GameEnhanceViewModel @Inject constructor(
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
     
+    private val _existingCardKeyHint = MutableStateFlow<String?>(null)
+    val existingCardKeyHint: StateFlow<String?> = _existingCardKeyHint.asStateFlow()
+    
     init {
         loadGames()
     }
@@ -87,7 +91,15 @@ class GameEnhanceViewModel @Inject constructor(
                     return@launch
                 }
                 
-                val success = gameRepository.saveCardKey(cardKey)
+                // 根据当前选择的游戏确定游戏类型
+                val gameType = when (_selectedGame.value?.name) {
+                    "三角洲行动" -> "delta"
+                    "和平精英" -> "pubg"
+                    "无畏契约" -> "valorant"
+                    else -> "default"
+                }
+                
+                val success = gameRepository.saveCardKey(cardKey, gameType)
                 if (success) {
                     _toastMessage.value = "卡密写入成功"
                     _cardKeyInput.value = "" // 清空输入
@@ -110,6 +122,46 @@ class GameEnhanceViewModel @Inject constructor(
      */
     fun selectGame(game: GameInfo) {
         _selectedGame.value = game
+        // 选择游戏后自动检测卡密文件
+        viewModelScope.launch {
+            checkExistingCardKey(game)
+        }
+    }
+    
+    /**
+     * 选择游戏并显示卡密对话框
+     */
+    suspend fun selectGameAndShowDialog(game: GameInfo) {
+        _selectedGame.value = game
+        // 先检测卡密文件
+        checkExistingCardKey(game)
+        // 然后显示对话框
+        _isCardKeyDialogShown.value = true
+    }
+    
+    /**
+     * 检测当前游戏的卡密文件是否存在
+     */
+    private suspend fun checkExistingCardKey(game: GameInfo) {
+        try {
+            // 根据游戏名称确定游戏类型
+            val gameType = when (game.name) {
+                "三角洲行动" -> "delta"
+                "和平精英" -> "pubg"
+                "无畏契约" -> "valorant"
+                else -> "default"
+            }
+            
+            Log.d("CARD_KEY_DEBUG", "Checking card key for game: ${game.name}, type: $gameType")
+            
+            // 仅检测卡密文件是否存在
+            val present = gameRepository.isCardKeyFilePresent(gameType)
+            Log.d("CARD_KEY_DEBUG", "Card key file present=$present")
+            _existingCardKeyHint.value = if (present) "检测到卡密文件" else "未检测到卡密文件"
+        } catch (e: Exception) {
+            Log.e("CARD_KEY_DEBUG", "Error checking card key: ${e.message}")
+            _existingCardKeyHint.value = "卡密检测失败: ${e.message}"
+        }
     }
     
     /**

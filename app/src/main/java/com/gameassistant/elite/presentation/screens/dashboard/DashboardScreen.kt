@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Android
@@ -26,8 +28,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -38,8 +43,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.gameassistant.elite.presentation.components.LoadingAnimation
-import com.gameassistant.elite.presentation.components.LoadingAnimationType
+import com.gameassistant.elite.presentation.components.common.AnimatedFlowBackground
 import com.gameassistant.elite.presentation.components.common.ScreenTitle
+import com.gameassistant.elite.presentation.utils.ScrollPerformanceOptimizer
+import com.gameassistant.elite.presentation.utils.rememberScrollMetrics
+import com.gameassistant.elite.presentation.utils.optimizeForPerformance
+import com.gameassistant.elite.presentation.utils.scrollPerformanceOptimized
+import com.gameassistant.elite.presentation.utils.smartPrefetch
+import com.gameassistant.elite.presentation.utils.optimizedScrollGestures
+import com.gameassistant.elite.presentation.utils.rememberHighPerformanceScrollConfig
+import com.gameassistant.elite.presentation.utils.rememberTouchPerformanceMonitor
+import com.gameassistant.elite.presentation.utils.PerformanceSensitiveComponent
+import com.gameassistant.elite.presentation.utils.recompositionOptimized
+import com.gameassistant.elite.presentation.utils.asStable
 import com.gameassistant.elite.presentation.theme.AccentBlue
 import com.gameassistant.elite.presentation.theme.ErrorRed
 import com.gameassistant.elite.presentation.theme.LightCyan
@@ -58,135 +74,51 @@ import com.gameassistant.elite.presentation.theme.WarningOrange
 fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
+    // 使用稳定的状态收集
     val systemInfo by viewModel.systemInfo.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
-    
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        PureWhite,
-                        MistGray.copy(alpha = 0.3f),
-                        LightCyan.copy(alpha = 0.1f)
-                    )
-                )
-            )
+
+    // 将系统信息包装为稳定对象
+    val stableSystemInfo = systemInfo.asStable()
+
+    PerformanceSensitiveComponent(
+        componentName = "DashboardScreen",
+        enableProfiling = false // 关闭性能分析以减少主线程负载
     ) {
-        if (isLoading) {
-            LoadingAnimation(
-                text = "正在加载系统信息...",
-                animationType = LoadingAnimationType.PULSING_CIRCLES
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                item {
-                    ScreenTitle(
-                        mainTitle = "U启动器",
-                        subtitle = "系统监控仪表盘"
-                    )
-                }
-                // 设备概览卡片
-                item {
-                    InfoCard(
-                        title = "设备概览",
-                        icon = Icons.Filled.Smartphone,
-                        iconColor = AccentBlue,
-                        content = {
-                            InfoRow("管理器版本", "v2.1.3")
-                            InfoRow("手机品牌", getLocalizedBrandName(android.os.Build.BRAND.takeIf { it.isNotEmpty() } ?: "Unknown"))
-                            InfoRow("设备型号", android.os.Build.MODEL)
-                            InfoRow("Android版本", "${systemInfo.androidVersion.takeIf { it.isNotEmpty() } ?: android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
-                        }
-                    )
-                }
-                
-                // 内核信息卡片
-                item {
-                    InfoCard(
-                        title = "内核信息",
-                        icon = Icons.Filled.Android,
-                        iconColor = SuccessGreen,
-                        content = {
-                            InfoRow("内核版本", formatKernelVersion(systemInfo.kernelVersion.takeIf { it.isNotEmpty() } ?: System.getProperty("os.version") ?: "Unknown"))
-                            InfoRow("架构", android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "Unknown")
-                            InfoRow("编译时间", android.os.Build.TIME.let { 
-                                java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
-                                    .format(java.util.Date(it))
-                            })
-                        }
-                    )
-                }
-                
-                // 安全状态卡片
-                item {
-                    InfoCard(
-                        title = "安全状态",
-                        icon = Icons.Filled.Security,
-                        iconColor = ErrorRed,
-                        content = {
-                            SecurityRow(
-                                "SELinux",
-                                systemInfo.selinuxStatus.name.takeIf { it.isNotEmpty() } ?: "Permissive",
-                                when (systemInfo.selinuxStatus.name.lowercase()) {
-                                    "enforcing" -> SuccessGreen
-                                    "permissive" -> WarningOrange
-                                    else -> ErrorRed
-                                }
-                            )
-                            SecurityRow(
-                                "Root状态", 
-                                if (systemInfo.isRooted) "已获取" else "未获取", 
-                                if (systemInfo.isRooted) SuccessGreen else ErrorRed,
-                                onClick = { viewModel.refreshRootStatus() }
-                            )
-                        }
-                    )
-                }
-                
-                // 使用说明卡片
-                item {
-                    InfoCard(
-                        title = "使用说明",
-                        icon = Icons.Filled.Info,
-                        iconColor = AccentBlue,
-                        content = {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                StyledInstructionItem("1", "安装支持 KPM的SukiSU-Ultra")
-                                StyledInstructionItem("2", "先启动辅助后再进入游戏")
-                                StyledInstructionItem("3", "自瞄均为陀螺仪辅助，需在游戏内开启陀螺仪")
-                            }
-                        }
-                    )
-                }
-            }
-        }
-        
-        // 错误提示
-        error?.let { errorMessage ->
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .align(Alignment.BottomCenter)
-            ) {
-                Text(
-                    text = errorMessage,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ErrorRed,
+        AnimatedFlowBackground {
+            if (isLoading) {
+                LoadingAnimation(text = "正在加载系统信息...")
+            } else {
+                OptimizedDashboardContent(
+                    systemInfo = stableSystemInfo.value,
                     modifier = Modifier
-                        .background(
-                            color = PureWhite,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        .padding(12.dp)
+                        .fillMaxSize()
+                        .recompositionOptimized("DashboardContent")
                 )
+            }
+            
+            // 错误提示
+            error?.let { errorMessage ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .align(Alignment.BottomCenter)
+                        .recompositionOptimized("ErrorMessage")
+                ) {
+                    Text(
+                        text = errorMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ErrorRed,
+                        modifier = Modifier
+                            .background(
+                                color = PureWhite,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(12.dp)
+                    )
+                }
             }
         }
     }
@@ -322,28 +254,12 @@ private fun SecurityRow(
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         )
         
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = statusColor
-            )
-            
-            if (value.lowercase() == "permissive") {
-                Spacer(modifier = Modifier.size(4.dp))
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(
-                            color = statusColor,
-                            shape = androidx.compose.foundation.shape.CircleShape
-                        )
-                )
-            }
-        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = statusColor
+        )
     }
 }
 
@@ -395,6 +311,144 @@ private fun formatKernelVersion(fullVersion: String): String {
     }
 }
 
+
+
+
+/**
+ * 优化后的仪表盘内容组件
+ * 使用性能优化的LazyColumn实现
+ */
+@Composable
+private fun OptimizedDashboardContent(
+    systemInfo: com.gameassistant.elite.domain.model.SystemInfo,
+    modifier: Modifier = Modifier
+) {
+    val listState = rememberLazyListState()
+    
+    // 性能配置
+    val performanceConfig = remember {
+        ScrollPerformanceOptimizer.PerformanceConfig(
+            enableMetrics = true, // 启用性能监控
+            enableOverscrollEffect = true,
+            enableFlingOptimization = true,
+            prefetchItemCount = 3,
+            maxScrollSpeed = 5000f
+        )
+    }
+    
+    // 高性能滑动配置
+    val scrollConfig = rememberHighPerformanceScrollConfig(
+        enableOverscroll = true,
+        enableNestedScroll = true
+    )
+    
+    // 触摸性能监控
+    val touchMonitor = rememberTouchPerformanceMonitor()
+    
+    // 滑动性能监控
+    val scrollMetrics = rememberScrollMetrics(listState, performanceConfig)
+    
+    // 应用性能优化
+    listState.optimizeForPerformance(performanceConfig)
+    
+    LazyColumn(
+        state = listState,
+        modifier = modifier
+            .scrollPerformanceOptimized(performanceConfig)
+            .optimizedScrollGestures(
+                lazyListState = listState,
+                enabled = true,
+                reverseDirection = false
+            ),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item(key = "title") {
+            ScreenTitle(
+                mainTitle = "U启动器",
+                subtitle = "系统监控仪表盘"
+            )
+        }
+        
+        item(key = "device_info") {
+            InfoCard(
+                title = "设备概览",
+                icon = Icons.Filled.Smartphone,
+                iconColor = AccentBlue,
+                content = {
+                    InfoRow("管理器版本", "v2.1.3")
+                    InfoRow("手机品牌", getLocalizedBrandName(android.os.Build.BRAND.takeIf { it.isNotEmpty() } ?: "Unknown"))
+                    InfoRow("设备型号", android.os.Build.MODEL)
+                    InfoRow("Android版本", "${systemInfo.androidVersion.takeIf { it.isNotEmpty() } ?: android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+                }
+            )
+        }
+        
+        item(key = "kernel_info") {
+            InfoCard(
+                title = "内核信息",
+                icon = Icons.Filled.Android,
+                iconColor = SuccessGreen,
+                content = {
+                    InfoRow("内核版本", formatKernelVersion(systemInfo.kernelVersion.takeIf { it.isNotEmpty() } ?: System.getProperty("os.version") ?: "Unknown"))
+                    InfoRow("架构", android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "Unknown")
+                    InfoRow("编译时间", android.os.Build.TIME.let { 
+                        java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                            .format(java.util.Date(it))
+                    })
+                }
+            )
+        }
+        
+        item(key = "security_info") {
+            InfoCard(
+                title = "安全状态",
+                icon = Icons.Filled.Security,
+                iconColor = ErrorRed,
+                content = {
+                    SecurityRow(
+                        "SELinux",
+                        when (systemInfo.selinuxStatus) {
+                            com.gameassistant.elite.domain.model.SELinuxStatus.ENFORCING -> "Enforcing"
+                            com.gameassistant.elite.domain.model.SELinuxStatus.PERMISSIVE -> "Permissive"
+                            com.gameassistant.elite.domain.model.SELinuxStatus.DISABLED -> "Disabled"
+                            com.gameassistant.elite.domain.model.SELinuxStatus.UNKNOWN -> "Unknown"
+                        },
+                        when (systemInfo.selinuxStatus) {
+                            com.gameassistant.elite.domain.model.SELinuxStatus.ENFORCING -> SuccessGreen
+                            com.gameassistant.elite.domain.model.SELinuxStatus.PERMISSIVE -> WarningOrange
+                            com.gameassistant.elite.domain.model.SELinuxStatus.DISABLED -> AccentBlue
+                            com.gameassistant.elite.domain.model.SELinuxStatus.UNKNOWN -> ErrorRed
+                        }
+                    )
+                    SecurityRow(
+                        "设备指纹", 
+                        systemInfo.buildFingerprint.takeIf { it.isNotEmpty() } ?: "Unknown",
+                        AccentBlue
+                    )
+                }
+            )
+        }
+        
+        item(key = "instructions") {
+            InfoCard(
+                title = "使用说明",
+                icon = Icons.Filled.Info,
+                iconColor = AccentBlue,
+                content = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        StyledInstructionItem("1", "安装支持 KPM的SukiSU-Ultra")
+                        StyledInstructionItem("2", "先启动辅助后再进入游戏")
+                        StyledInstructionItem("3", "自瞄均为陀螺仪辅助，需在游戏内开启陀螺仪")
+                    }
+                }
+            )
+        }
+    }
+}
+
+
+
 /**
  * 带有艺术字序号的使用说明项
  */
@@ -432,3 +486,4 @@ private fun StyledInstructionItem(number: String, text: String) {
         )
     }
 }
+

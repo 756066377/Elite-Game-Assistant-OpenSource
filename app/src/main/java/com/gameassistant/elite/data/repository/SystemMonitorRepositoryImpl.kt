@@ -126,15 +126,13 @@ class SystemMonitorRepositoryImpl @Inject constructor(
         }
     }
     
-    override suspend fun checkRootStatus(): Boolean {
-        return libsuSystemInfoDataSource.checkRootStatus()
+
+    
+    override suspend fun writeCardKey(cardKey: String, gameType: String): Boolean {
+        return libsuSystemInfoDataSource.writeCardKey(cardKey, gameType)
     }
     
-    override suspend fun writeCardKey(cardKey: String): Boolean {
-        return libsuSystemInfoDataSource.writeCardKey(cardKey)
-    }
-    
-    override suspend fun readCardKey(): String? {
-        return libsuSystemInfoDataSource.readCardKey()
+    override suspend fun doesCardKeyFileExist(gameType: String): Boolean {
+        return libsuSystemInfoDataSource.doesCardKeyFileExist(gameType)
     }
 }

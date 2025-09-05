@@ -1,5 +1,6 @@
 package com.gameassistant.elite.data.datasource
 
+import android.util.Log
 import com.gameassistant.elite.domain.model.SELinuxStatus
 import com.gameassistant.elite.domain.model.SystemInfo
 import com.topjohnwu.superuser.Shell
@@ -13,100 +14,81 @@ import javax.inject.Singleton
 class LibsuSystemInfoDataSource @Inject constructor() {
 
     /**
-     * 获取系统信息，包括真实的 Root 状态
+     * 获取系统信息
      */
     suspend fun getSystemInfo(): SystemInfo {
         val shell = Shell.getShell()
         
-        // 使用统一的Root检测逻辑
-        val isRooted = checkRootStatus()
-        
         val kernelVersion = shell.newJob().add("uname -r").exec().out.firstOrNull() ?: ""
         val selinuxStatusString = shell.newJob().add("getenforce").exec().out.firstOrNull()?.trim()
+        val buildFingerprint = shell.newJob().add("getprop ro.build.fingerprint").exec().out.firstOrNull() ?: android.os.Build.FINGERPRINT
         
-        val selinuxStatus = when (selinuxStatusString) {
-            "Enforcing" -> SELinuxStatus.ENFORCING
-            "Permissive" -> SELinuxStatus.PERMISSIVE
-            "Disabled" -> SELinuxStatus.DISABLED
+        val selinuxStatus = when (selinuxStatusString?.lowercase()) {
+            "enforcing" -> SELinuxStatus.ENFORCING
+            "permissive" -> SELinuxStatus.PERMISSIVE
+            "disabled" -> SELinuxStatus.DISABLED
             else -> SELinuxStatus.UNKNOWN
         }
 
         return SystemInfo(
             kernelVersion = kernelVersion,
-            selinuxStatus = selinuxStatus,
-            isRooted = isRooted
+            buildFingerprint = buildFingerprint,
+            selinuxStatus = selinuxStatus
         )
     }
 
-    /**
-     * 检查设备的 Root 状态
-     * @return 如果设备已 Root，则返回 true，否则返回 false
-     */
-    suspend fun checkRootStatus(): Boolean {
-        return try {
-            // 确保Shell已初始化
-            val shell = Shell.getShell()
-            
-            // 双重验证：既检查Shell状态，也执行一个简单的Root命令
-            if (!shell.isRoot) {
-                return false
-            }
-            
-            // 执行一个简单的Root命令来验证实际权限
-            val testResult = shell.newJob().add("id").exec()
-            val output = testResult.out.firstOrNull() ?: ""
-            
-            // 检查命令是否成功执行，并且输出包含uid=0（root用户）
-            testResult.isSuccess && output.contains("uid=0")
-        } catch (e: Exception) {
-            false
-        }
-    }
+
     
     /**
      * 将卡密写入到指定文件，并进行写后即读验证
      * @param cardKey 要写入的卡密
+     * @param gameType 游戏类型，用于确定文件路径
      * @return 如果写入且验证成功，则返回 true，否则返回 false
      */
-    suspend fun writeCardKey(cardKey: String): Boolean {
-        val shell = Shell.getShell()
-        if (!shell.isRoot) {
-            return false // 如果没有Root权限，直接返回失败
+    suspend fun writeCardKey(cardKey: String, gameType: String = "default"): Boolean {
+        return try {
+            val shell = Shell.getShell()
+            
+            val filePath = getCardKeyFilePath(gameType)
+            // 使用 'echo' 和 '>' 重定向。这会自动创建文件（如果不存在）或覆盖现有文件。
+            val writeCommand = "echo '$cardKey' > $filePath"
+            
+            // 1. 执行写入操作
+            val writeResult = shell.newJob().add(writeCommand).exec()
+            
+            // 2. 直接根据写入命令的执行结果判断成功与否
+            // 如果命令执行成功（exit code: 0），就认为写入成功
+            writeResult.isSuccess
+        } catch (e: Exception) {
+            false
         }
-
-        val filePath = "/data/system/uCard.txt"
-        // 使用 'echo' 和 '>' 重定向。这会自动创建文件（如果不存在）或覆盖现有文件。
-        val writeCommand = "echo '$cardKey' > $filePath"
-        
-        // 1. 执行写入操作
-        val writeResult = shell.newJob().add(writeCommand).exec()
-        if (!writeResult.isSuccess) {
-            return false // 写入命令执行失败
-        }
-
-        // 2. 写后即读，进行验证
-        val readResult = shell.newJob().add("cat $filePath").exec()
-        if (!readResult.isSuccess) {
-            return false // 读取命令执行失败
-        }
-
-        val contentRead = readResult.out.firstOrNull()?.trim()
-
-        // 3. 比较读取的内容是否与写入的完全一致
-        return contentRead == cardKey && contentRead.isNotEmpty()
     }
 
     /**
-     * 从指定文件读取卡密
-     * @return 如果读取成功，则返回卡密字符串，否则返回 null
+     * 检查卡密文件是否存在
+     * @param gameType 游戏类型，用于确定文件路径
+     * @return 如果文件存在，则返回 true，否则返回 false
      */
-    suspend fun readCardKey(): String? {
-        val command = "cat /data/system/uCard.txt"
+    suspend fun doesCardKeyFileExist(gameType: String = "default"): Boolean {
+        val filePath = getCardKeyFilePath(gameType)
+        // 使用 `test -e` 检查文件是否存在，这比 `[ -f ... ]` 更通用
+        val command = "test -e $filePath"
         val result = Shell.getShell().newJob().add(command).exec()
-        return if (result.isSuccess) {
-            result.out.firstOrNull()?.trim()
-        } else {
-            null
+        Log.d("CARD_KEY_DEBUG", "File existence check command: '$command', IsSuccess: ${result.isSuccess}")
+        return result.isSuccess
+    }
+    
+    /**
+     * 根据游戏类型获取卡密文件路径
+     * @param gameType 游戏类型
+     * @return 对应的文件路径
+     */
+    private fun getCardKeyFilePath(gameType: String): String {
+        return when (gameType.lowercase()) {
+            "delta", "三角洲行动" -> "/data/system/csCard.txt"
+            "pubg", "和平精英" -> "/data/system/uCard.txt"
+            "valorant", "无畏契约" -> "/data/system/uCard.txt"
+            else -> "/data/system/uCard.txt" // 默认使用uCard.txt
         }
     }
 }

@@ -50,7 +50,6 @@ class DashboardViewModel @Inject constructor(
     init {
         loadSystemInfo()
         startMonitoring()
-        startRootStatusMonitoring()
     }
     
     /**
@@ -69,28 +68,7 @@ class DashboardViewModel @Inject constructor(
         }
     }
     
-    /**
-     * 开始监控Root状态
-     * 每5秒检查一次Root状态，以便及时响应权限变化
-     */
-    private fun startRootStatusMonitoring() {
-        viewModelScope.launch {
-            while (true) {
-                try {
-                    kotlinx.coroutines.delay(5000) // 每5秒检查一次
-                    val currentRootStatus = systemMonitorRepository.checkRootStatus()
-                    
-                    // 如果Root状态发生变化，更新SystemInfo
-                    if (currentRootStatus != _systemInfo.value.isRooted) {
-                        val updatedInfo = _systemInfo.value.copy(isRooted = currentRootStatus)
-                        _systemInfo.value = updatedInfo
-                    }
-                } catch (e: Exception) {
-                    // 静默处理Root状态检查错误，避免干扰用户体验
-                }
-            }
-        }
-    }
+
     
     /**
      * 开始监控系统状态
@@ -141,19 +119,5 @@ class DashboardViewModel @Inject constructor(
         loadSystemInfo()
     }
     
-    /**
-     * 手动刷新Root状态
-     * 当用户刚授予Root权限时可以调用此方法立即更新状态
-     */
-    fun refreshRootStatus() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val currentRootStatus = systemMonitorRepository.checkRootStatus()
-                val updatedInfo = _systemInfo.value.copy(isRooted = currentRootStatus)
-                _systemInfo.value = updatedInfo
-            } catch (e: Exception) {
-                _error.value = "Root状态检查失败: ${e.message}"
-            }
-        }
-    }
+
 }
