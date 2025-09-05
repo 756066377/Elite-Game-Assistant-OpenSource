@@ -264,5 +264,92 @@ Elite-Game-Assistant-OpenSource/
 
 ---
 
+## 🧩 使用说明（面向二次开发）
+
+1) 放置 .so 文件
+- 目录：将预编译的 .so 分别放入
+  - app/src/main/jniLibs/arm64-v8a/delta/    （放 1 个 .so）
+  - app/src/main/jniLibs/arm64-v8a/pubg/     （放 1 个 .so）
+  - app/src/main/jniLibs/arm64-v8a/valorant/ （放 1 个 .so）
+- 注意：每个子目录仅放“一个目标 .so”，否则会出现重命名覆盖。Android 只会打包 ABI 根目录下的 .so，子目录默认不参与打包，本项目已在构建前自动同步到根目录。
+
+2) 构建时自动复制与重命名
+- Gradle 预构建任务会在编译前自动把各子目录中的 .so 复制到：
+  app/src/main/jniLibs/arm64-v8a/
+- 并统一重命名为：
+  - delta   -> libdelta.so
+  - pubg    -> libpubg.so
+  - valorant-> libvalorant.so
+- 你只需正常构建（Android Studio 直接 Run/Build 或命令行 assemble/bundle），无需手工移动。
+
+3) 代码按需加载与调用
+```kotlin
+import com.gameassistant.elite.data.nativelib.NativeLibraryManager
+
+// 以 PUBG 为例
+NativeLibraryManager.ensureLoaded(NativeLibraryManager.GameLib.Pubg)
+// 然后调用 native 方法
+val initCode = NativeLibraryManager.nativeInit(gameFlag = 2) // 自定义你的 gameFlag 映射
+val startRet = NativeLibraryManager.startGameEnhancement(gameFlag = 2, options = 0)
+// ... 游戏过程中
+val stopRet = NativeLibraryManager.stopGameEnhancement()
+```
+- 建议的 gameFlag 映射（可按需调整并在 native 层对应）：
+  - Delta = 1, Pubg = 2, Valorant = 3
+
+4) JNI 签名示例（C/C++）
+以包名 com.gameassistant.elite.data.nativelib、类名 NativeLibraryManager 为例，external 方法：
+```kotlin
+external fun nativeInit(gameFlag: Int): Int
+external fun startGameEnhancement(gameFlag: Int, options: Int = 0): Int
+external fun stopGameEnhancement(): Int
+```
+对应 JNI 实现（静态注册）：
+```cpp
+extern "C" {
+
+// com.gameassistant.elite.data.nativelib.NativeLibraryManager.nativeInit
+JNIEXPORT jint JNICALL
+Java_com_gameassistant_elite_data_1nativelib_NativeLibraryManager_1nativeInit(
+        JNIEnv* env, jclass clazz, jint gameFlag) {
+    // TODO: 初始化
+    return 0; // 成功返回 0，自定义
+}
+
+// com.gameassistant.elite.data.nativelib.NativeLibraryManager.startGameEnhancement
+JNIEXPORT jint JNICALL
+Java_com_gameassistant_elite_data_1nativelib_NativeLibraryManager_1startGameEnhancement(
+        JNIEnv* env, jclass clazz, jint gameFlag, jint options) {
+    // TODO: 启动增强
+    return 0;
+}
+
+// com.gameassistant.elite.data.nativelib.NativeLibraryManager.stopGameEnhancement
+JNIEXPORT jint JNICALL
+Java_com_gameassistant_elite_data_1nativelib_NativeLibraryManager_1stopGameEnhancement(
+        JNIEnv* env, jclass clazz) {
+    // TODO: 停止增强
+    return 0;
+}
+}
+```
+- 也可用 RegisterNatives 动态注册，避免方法名过长与转义问题。
+
+5) ABI 与混淆注意
+- 已在 Gradle 限定仅打包 arm64-v8a。如需额外 ABI，请在 defaultConfig.ndk.abiFilters 中添加。
+- 开启混淆时保留 native 方法与桥接类：
+```
+-keepclasseswithmembers class * { native <methods>; }
+-keep class com.gameassistant.elite.data.nativelib.** { *; }
+```
+
+6) 常见问题排查
+- 运行时报 UnsatisfiedLinkError：
+  - 检查构建后 app/src/main/jniLibs/arm64-v8a 根目录是否生成 libdelta.so/libpubg.so/libvalorant.so
+  - 确认设备为 arm64-v8a；若非 64 位，需提供对应 ABI 的 .so 并修改 abiFilters
+  - 名称需与 System.loadLibrary("delta|pubg|valorant") 对应（去掉前缀 lib、后缀 .so）
+  - 更换 .so 后建议 Clean Project 或 Invalidate Caches / Restart
+- 多 .so 冲突：同一子目录只放 1 个 .so；如放多个，会按统一名覆盖输出
+
 ## 📄 许可证
 本项目基于 MIT 协议开源。详见 [LICENSE](LICENSE)。
