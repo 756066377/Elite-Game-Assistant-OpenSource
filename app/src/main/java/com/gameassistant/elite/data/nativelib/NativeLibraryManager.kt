@@ -1,97 +1,36 @@
 package com.gameassistant.elite.data.nativelib
 
-import android.content.Context
-import com.gameassistant.elite.data.model.GameType
-import dagger.hilt.android.qualifiers.ApplicationContext
-import javax.inject.Inject
-import javax.inject.Singleton
-
 /**
- * 原生库管理器
- * 负责加载和管理游戏增强功能的原生库
+ * Native 库加载与接口桥接
+ * - 确保在调用 external 方法前，先调用 ensureLoaded 对应游戏库
+ * - 约定 .so 最终打包名：libdelta.so / libpubg.so / libvalorant.so（加载名分别为 delta/pubg/valorant）
  */
-@Singleton
-class NativeLibraryManager @Inject constructor(
-    @ApplicationContext private val context: Context
-) {
-    
-    companion object {
-        // 原生库加载状态
-        private var isLibraryLoaded = false
-        
-        // 加载原生库
-        init {
-            try {
-                System.loadLibrary("gameenhance")
-                isLibraryLoaded = true
-            } catch (e: UnsatisfiedLinkError) {
-                isLibraryLoaded = false
+object NativeLibraryManager {
+
+    enum class GameLib(val libName: String) {
+        Delta("delta"),
+        Pubg("pubg"),
+        Valorant("valorant")
+    }
+
+    @Volatile
+    private val loaded: MutableSet<String> = mutableSetOf()
+
+    /**
+     * 按需加载对应 .so（lib{libName}.so）
+     */
+    fun ensureLoaded(game: GameLib) {
+        if (loaded.contains(game.libName)) return
+        synchronized(this) {
+            if (!loaded.contains(game.libName)) {
+                System.loadLibrary(game.libName)
+                loaded.add(game.libName)
             }
         }
     }
-    
-    /**
-     * 检查原生库是否已加载
-     */
-    fun isNativeLibraryLoaded(): Boolean = isLibraryLoaded
-    
-    /**
-     * 启动游戏增强功能
-     * @param gameType 游戏类型
-     * @param cardKey 卡密
-     * @return 是否启动成功
-     */
-    fun startGameEnhancement(gameType: GameType, cardKey: String): Boolean {
-        if (!isLibraryLoaded) {
-            return false
-        }
-        
-        return try {
-            // 这里应该调用原生方法启动游戏增强
-            // 目前返回模拟结果
-            nativeStartEnhancement(gameType.packageName, cardKey)
-        } catch (e: Exception) {
-            false
-        }
-    }
-    
-    /**
-     * 停止游戏增强功能
-     * @param gameType 游戏类型
-     * @return 是否停止成功
-     */
-    fun stopGameEnhancement(gameType: GameType): Boolean {
-        if (!isLibraryLoaded) {
-            return false
-        }
-        
-        return try {
-            // 这里应该调用原生方法停止游戏增强
-            nativeStopEnhancement(gameType.packageName)
-        } catch (e: Exception) {
-            false
-        }
-    }
-    
-    /**
-     * 检查游戏是否正在运行增强功能
-     * @param gameType 游戏类型
-     * @return 是否正在运行
-     */
-    fun isEnhancementRunning(gameType: GameType): Boolean {
-        if (!isLibraryLoaded) {
-            return false
-        }
-        
-        return try {
-            nativeIsEnhancementRunning(gameType.packageName)
-        } catch (e: Exception) {
-            false
-        }
-    }
-    
-    // 原生方法声明（需要在C++中实现）
-    private external fun nativeStartEnhancement(packageName: String, cardKey: String): Boolean
-    private external fun nativeStopEnhancement(packageName: String): Boolean
-    private external fun nativeIsEnhancementRunning(packageName: String): Boolean
+
+    // 示例 external 方法（按需补充/修改）
+    external fun nativeInit(gameFlag: Int): Int
+    external fun startGameEnhancement(gameFlag: Int, options: Int = 0): Int
+    external fun stopGameEnhancement(): Int
 }

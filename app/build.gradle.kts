@@ -1,3 +1,6 @@
+import org.gradle.api.file.DuplicatesStrategy
+import org.gradle.api.tasks.Copy
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -7,6 +10,9 @@ plugins {
     id("kotlin-parcelize")
     id("com.google.devtools.ksp")
 }
+
+import org.gradle.api.file.DuplicatesStrategy
+import org.gradle.api.tasks.Copy
 
 android {
     namespace = "com.gameassistant.elite"
@@ -23,6 +29,40 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // 仅打包 arm64-v8a
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+
+// 将 {delta,pubg,valorant} 下的 .so 复制到 arm64-v8a 根目录并统一命名，确保被打包
+val syncGameSo by tasks.registering(Copy::class) {
+    val abiRoot = layout.projectDirectory.dir("src/main/jniLibs/arm64-v8a")
+
+    from(abiRoot.dir("delta")) {
+        include("**/*.so")
+        rename { "libdelta.so" }
+        includeEmptyDirs = false
+    }
+    from(abiRoot.dir("pubg")) {
+        include("**/*.so")
+        rename { "libpubg.so" }
+        includeEmptyDirs = false
+    }
+    from(abiRoot.dir("valorant")) {
+        include("**/*.so")
+        rename { "libvalorant.so" }
+        includeEmptyDirs = false
+    }
+
+    into(abiRoot.asFile)
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+// 在构建前执行同步任务，保证 .so 已就位
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(syncGameSo)
+}
     }
 
     buildTypes {
@@ -57,6 +97,37 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+}
+
+/**
+ * 将 {delta,pubg,valorant} 下的 .so 复制到 arm64-v8a 根目录并统一命名，确保被打包
+ */
+val syncGameSo by tasks.registering(Copy::class) {
+    val abiRoot = layout.projectDirectory.dir("src/main/jniLibs/arm64-v8a")
+
+    from(abiRoot.dir("delta")) {
+        include("**/*.so")
+        rename { "libdelta.so" }
+        includeEmptyDirs = false
+    }
+    from(abiRoot.dir("pubg")) {
+        include("**/*.so")
+        rename { "libpubg.so" }
+        includeEmptyDirs = false
+    }
+    from(abiRoot.dir("valorant")) {
+        include("**/*.so")
+        rename { "libvalorant.so" }
+        includeEmptyDirs = false
+    }
+
+    into(abiRoot.asFile)
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+// 在构建前执行同步任务，保证 .so 已就位
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(syncGameSo)
 }
 
 dependencies {

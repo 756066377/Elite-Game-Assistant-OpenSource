@@ -154,6 +154,37 @@ Elite-Game-Assistant-OpenSource/
    - 对接 lib 名称变更：确保 `System.loadLibrary("实际名")` 与文件一致
 
 ### 方案二：使用 CMake 构建源码（可选）
+
+## 🔧 SO 接入强约束与自动打包
+- 目录组织（管理用，子目录默认不参与打包）：
+  ```
+  app/src/main/jniLibs/arm64-v8a/
+  ├── delta/     # 放置 Delta 的一个 .so（任意文件名）
+  ├── pubg/      # 放置 PUBG 的一个 .so（任意文件名）
+  └── valorant/  # 放置 Valorant 的一个 .so（任意文件名）
+  ```
+- 自动复制与重命名（Gradle 任务）：
+  - 构建前，会自动将上述子目录中的 .so 复制到 `app/src/main/jniLibs/arm64-v8a/` 根目录，并统一命名为：
+    - delta -> `libdelta.so`
+    - pubg -> `libpubg.so`
+    - valorant -> `libvalorant.so`
+  - 注意：Android 仅打包 ABI 根目录下的 .so；子目录不打包。本项目通过预构建任务确保最终产物包含目标 .so。
+- 代码加载规范（按需加载）：
+  ```kotlin
+  // 以 PUBG 为例：
+  NativeLibraryManager.ensureLoaded(NativeLibraryManager.GameLib.Pubg)
+  // 然后再调用 native 方法
+  NativeLibraryManager.startGameEnhancement(gameFlag = 2, options = 0)
+  ```
+- 常见问题：
+  - 运行时报 UnsatisfiedLinkError：
+    - 检查 `app/src/main/jniLibs/arm64-v8a` 根下是否存在 `libdelta.so/libpubg.so/libvalorant.so`
+    - 确认设备为 arm64-v8a；若非 64 位设备，请提供对应 ABI 的 .so
+    - 混淆规则需保留 native 方法：
+      ```
+      -keepclasseswithmembers class * { native <methods>; }
+      -keep class com.gameassistant.elite.data.nativelib.** { *; }
+      ```
 1. 添加 `CMakeLists.txt`（示例）
    ```cmake
    cmake_minimum_required(VERSION 3.22.1)
